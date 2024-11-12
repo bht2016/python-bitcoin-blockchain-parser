@@ -66,6 +66,9 @@ class Address(object):
         otherwise using base58
         """
         if self._address is None:
+            if self.public_key is not None:
+                return b2a_hex(self.public_key).decode("ascii")
+
             if self.type == "bech32m":
                 tweaked_pubkey = b2a_hex(self.hash).decode("ascii")
                 self._address = from_taproot(tweaked_pubkey)
