@@ -6,10 +6,10 @@ from collections import namedtuple
 from blockchain_parser.block import Block
 from blockchain_parser.blockchain import get_blocks
 
-Block_fields = ['block_hash', 'version', 'height', 'timestamp', 'nonce', 'difficulty', 'merkle_root', 'trans_cnt']
+Block_fields = ['block_hash', 'version', 'height', 'timestamp', 'datetime', 'nonce', 'difficulty', 'merkle_root', 'trans_cnt']
 Transaction_fields = ['txid', 'block_hash', 'tx_hash', 'version', 'locktime', 'is_segwit', 'is_coinbase', 'intput_cnt', 'ouput_cnt', 'total_satoshis']
 Input_fields = ['txid', 'seq_number', 'soruce_txid', 'output_index', 'unlock_script', 'witness']
-Output_fields = ['txid', 'output_index', 'addr_type', 'addresses', 'satoshis', 'lock_script']
+Output_fields = ['txid', 'output_index', 'addr_type', 'addresses', 'satoshis', 'lock_script', "timestamp"]
 UTXO_fields = ['txid', 'output_index']
 
 
@@ -50,7 +50,7 @@ def save_checkpoint(file_path, block_index, block_hight):
 
 
 def block_data(block):
-    return [block.hash, block.header.version, block.height, block.header.timestamp, block.header.nonce, block.header.difficulty, block.header.merkle_root, block.n_transactions]
+    return [block.hash, block.header.version, block.height, block.header.timestamp, block.header.datetime, block.header.nonce, block.header.difficulty, block.header.merkle_root, block.n_transactions]
 
 
 def tx_data(block, tx, total_satoshis):
@@ -61,8 +61,8 @@ def input_data(tx, input):
     return [tx.txid, input.sequence_number, input.transaction_hash, input.transaction_index, input.script, input.witnesses]
 
 
-def output_data(tx, output_index, output):
-    return [tx.txid, output_index, output.type, output.addresses, output.value, output.script]
+def output_data(block, tx, output_index, output):
+    return [tx.txid, output_index, output.type, output.addresses, output.value, output.script, block.header.timestamp]
 
 
 if __name__ == '__main__':
@@ -116,7 +116,7 @@ if __name__ == '__main__':
                 total_satoshis = 0
                 output_tmp_list = []
                 for i, output in enumerate(tx.outputs):
-                    output_tmp_list.append(output_data(tx, i, output))
+                    output_tmp_list.append(output_data(block, tx, i, output))
                     total_satoshis += output.value
 
                     if output.is_pubkey():

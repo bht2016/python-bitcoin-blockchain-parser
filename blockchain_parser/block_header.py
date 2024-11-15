@@ -23,6 +23,7 @@ class BlockHeader(object):
         self._previous_block_hash = None
         self._merkle_root = None
         self._timestamp = None
+        self._datetime = None
         self._bits = None
         self._nonce = None
         self._difficulty = None
@@ -62,10 +63,19 @@ class BlockHeader(object):
     def timestamp(self):
         """Returns the timestamp of the block as a UTC datetime object"""
         if self._timestamp is None:
-            self._timestamp = datetime.utcfromtimestamp(
+            # self._timestamp = datetime.utcfromtimestamp(
+            #     decode_uint32(self.hex[68:72])
+            # )
+            self._timestamp = decode_uint32(self.hex[68:72])
+        return self._timestamp
+
+    @property
+    def datetime(self):
+        if self._datetime is None:
+            self._datetime = datetime.utcfromtimestamp(
                 decode_uint32(self.hex[68:72])
             )
-        return self._timestamp
+        return self._datetime
 
     @property
     def bits(self):
