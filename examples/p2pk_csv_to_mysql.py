@@ -22,7 +22,7 @@ def read_csv(file_path):
                 continue
             yield row
 
-def save_to_mysql(preSQLs, insertSQL, data_list):
+def save_to_mysql(preSQLs, insertSQL=None, data_list=None):
     try:
         conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='123456', db='p2pk', charset="utf8")
 
@@ -31,17 +31,18 @@ def save_to_mysql(preSQLs, insertSQL, data_list):
                 cursor.execute(sql)
             conn.commit()
 
-            batch = []
-            for item in data_list:
-                batch.append(item)
-                if len(batch) > 10000:
+            if data_list is not None:
+                batch = []
+                for item in data_list:
+                    batch.append(item)
+                    if len(batch) > 10000:
+                        cursor.executemany(insertSQL, batch)
+                        conn.commit()
+                        batch = []
+
+                if len(batch) > 0:
                     cursor.executemany(insertSQL, batch)
                     conn.commit()
-                    batch = []
-
-            if len(batch) > 0:
-                cursor.executemany(insertSQL, batch)
-                conn.commit()
 
     except Exception as e:
         print(e)
@@ -51,6 +52,8 @@ def save_to_mysql(preSQLs, insertSQL, data_list):
 
 
 def block_to_mysql():
+
+    print('start to load block data')
 
     block_data_list = []
     for row in read_csv('data/p2pk_blocks.csv'):
@@ -87,8 +90,12 @@ def block_to_mysql():
     insertSQL = "INSERT INTO p2pk_blocks(block_id, block_hash, version, timestamp, nonce, difficulty, merkle_root, trans_cnt) VALUES(%s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, block_data_list)
 
+    print('load block data finished')
+
 
 def transaction_to_mysql():
+
+    print('start to load transaction data')
 
     tx_data_list = []
     for row in read_csv('data/p2pk_txs.csv'):
@@ -131,8 +138,12 @@ def transaction_to_mysql():
     insertSQL = "INSERT INTO p2pk_transactions(tx_id, block_id, tx_hash, version, locktime, is_segwit, is_coinbase, input_cnt, ouput_cnt, total_satoshis) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, tx_data_list)
 
+    print('load transaction data finished')
+
 
 def input_to_mysql():
+
+    print('start to load input data')
 
     input_data_list = []
     for row in read_csv('data/p2pk_inputs.csv'):
@@ -168,8 +179,16 @@ def input_to_mysql():
     insertSQL = "INSERT INTO p2pk_inputs(tx_id, output_id, transaction_hash, transaction_index, unlock_script, witness) VALUES(%s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, input_data_list)
 
+    # 创建索引
+    save_to_mysql(["CREATE INDEX `idx_tx_id` ON `p2pk_inputs` (`tx_id`)"])
+    save_to_mysql(["CREATE INDEX `idx_output_id` ON `p2pk_inputs` (`output_id`)"])
+
+    print('load input data finished')
+
 
 def output_to_mysql():
+
+    print('start to load output data')
 
     addr_map = {}
     addr_id = 0
@@ -238,10 +257,17 @@ def output_to_mysql():
     insertSQL = "INSERT INTO p2pk_outputs(output_id, trans_id, output_index, relation_addr, addr_type, address, satoshis, lock_script, timestamp) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, output_data_list)
 
+    # 创建索引
+    save_to_mysql(["CREATE INDEX `idx_relation_addr` ON `p2pk_outputs` (`relation_addr`)"])
+
+    print('load output data finished')
+
     address_to_mysql(addr_map)
 
 
 def address_to_mysql(addr_map):
+
+    print('start to load address data')
 
     addr_data_list = []
     for addr, addr_info in addr_map.items():
@@ -265,11 +291,13 @@ def address_to_mysql(addr_map):
     insertSQL = "INSERT INTO p2pk_address(addr_id, address, satoshis, tx_count, first_time, last_time) VALUES(%s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, addr_data_list)
 
+    print('load address data finished')
+
 
 if __name__ == '__main__':
-    # block_to_mysql()
-    # transaction_to_mysql()
-    # input_to_mysql()
+    block_to_mysql()
+    transaction_to_mysql()
+    input_to_mysql()
     output_to_mysql()
 
 
