@@ -24,7 +24,7 @@ def read_csv(file_path):
 
 def save_to_mysql(preSQLs, insertSQL=None, data_list=None):
     try:
-        conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='123456', db='p2pk', charset="utf8")
+        conn = pymysql.connect(host='10.10.12.3', port=3306, user='root', password='123456', db='p2pk', charset="utf8")
 
         with conn.cursor() as cursor:
             for sql in preSQLs:
@@ -90,6 +90,9 @@ def block_to_mysql():
     insertSQL = "INSERT INTO p2pk_blocks(block_id, block_hash, version, timestamp, nonce, difficulty, merkle_root, trans_cnt) VALUES(%s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, block_data_list)
 
+    # 创建索引
+    save_to_mysql(["CREATE INDEX `idx_block_hash` ON `p2pk_blocks` (`block_hash`)"])
+
     print('load block data finished')
 
 
@@ -138,6 +141,10 @@ def transaction_to_mysql():
     insertSQL = "INSERT INTO p2pk_transactions(tx_id, block_id, tx_hash, version, locktime, is_segwit, is_coinbase, input_cnt, ouput_cnt, total_satoshis) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, tx_data_list)
 
+    # 创建索引
+    save_to_mysql(["CREATE INDEX `idx_block_id` ON `p2pk_transactions` (`block_id`)"])
+    save_to_mysql(["CREATE INDEX `idx_tx_hash` ON `p2pk_transactions` (`tx_hash`)"])
+
     print('load transaction data finished')
 
 
@@ -149,24 +156,32 @@ def input_to_mysql():
     for row in read_csv('data/p2pk_inputs.csv'):
         # trans_id,output_id,transaction_hash,transaction_index,unlock_script,witness
 
-        tx_id = int(row[0])
-        output_id = int(row[1])
-        tx_hash = row[2]
-        tx_index = int(row[3])
-        unlock_script = row[4]
-        witness = row[5]
+        input_id = int(row[0])
+        tx_id = int(row[1])
+        output_id = int(row[2])
+        tx_hash = row[3]
+        tx_index = int(row[4])
+        unlock_script = row[5]
+        witness = row[6]
+
+        coinbase = False
+        if row[3] == '0000000000000000000000000000000000000000000000000000000000000000':
+            coinbase = True
+
 
         if tx_index >= 0xFFFFFFFF:
             tx_index = -1
 
-        input_data_list.append((tx_id, output_id, tx_hash, tx_index, unlock_script, witness))
+        input_data_list.append((input_id, tx_id, coinbase, output_id, tx_hash, tx_index, unlock_script, witness))
 
     sql = ["""
         DROP TABLE IF EXISTS `p2pk_inputs`
         """,
         """
         CREATE TABLE `p2pk_inputs` (
+            `input_id` int(11) NOT NULL PRIMARY KEY,
             `tx_id` int(11) NOT NULL,
+            `coinbase` int(1) NOT NULL,
             `output_id` int(11) NOT NULL,
             `transaction_hash` varchar(128) NOT NULL,
             `transaction_index` int(11) NOT NULL,
@@ -176,7 +191,7 @@ def input_to_mysql():
         """
     ]
 
-    insertSQL = "INSERT INTO p2pk_inputs(tx_id, output_id, transaction_hash, transaction_index, unlock_script, witness) VALUES(%s, %s, %s, %s, %s, %s)"
+    insertSQL = "INSERT INTO p2pk_inputs(input_id, tx_id, coinbase, output_id, transaction_hash, transaction_index, unlock_script, witness) VALUES(%s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, input_data_list)
 
     # 创建索引
@@ -202,6 +217,9 @@ def output_to_mysql():
             output_id_set.add(output_id)
             addr_info['output_id_set'] = output_id_set
 
+            addr_info['utxo_cnt'] = len(output_id_set)
+            addr_info['spend_cnt'] = 0
+
             addr_map[addr] = addr_info
 
 
@@ -222,6 +240,7 @@ def output_to_mysql():
             continue
 
         relation_addr = -1
+        spended = 1  # 是否已经花费
         if address in addr_map:
             addr_info = addr_map[address]
             relation_addr = int(addr_info['addr_id'])
@@ -231,9 +250,12 @@ def output_to_mysql():
 
             if output_id in addr_info['output_id_set']:
                 addr_info['satoshis'] = addr_info.get('satoshis', 0) + int(satoshis)
+                spended = 0
+            else:
+                addr_info['spend_cnt'] = addr_info.get('spend_cnt', 0) + 1
 
 
-        output_data_list.append((output_id, tx_id, output_index, relation_addr, addr_type, address, satoshis, lock_script, timestamp))
+        output_data_list.append((output_id, tx_id, output_index, spended, relation_addr, addr_type, address, satoshis, lock_script, timestamp))
 
 
     sql = ["""
@@ -242,8 +264,9 @@ def output_to_mysql():
         """
         CREATE TABLE `p2pk_outputs` (
             `output_id` int(11) NOT NULL PRIMARY KEY,
-            `trans_id` int(11) NOT NULL,
+            `tx_id` int(11) NOT NULL,
             `output_index` int(11) NOT NULL,
+            `spended` bit(1) NOT NULL,
             `relation_addr` int(11) NOT NULL,
             `addr_type` varchar(32) NOT NULL,
             `address` varchar(256) NOT NULL,
@@ -254,10 +277,11 @@ def output_to_mysql():
         """
     ]
 
-    insertSQL = "INSERT INTO p2pk_outputs(output_id, trans_id, output_index, relation_addr, addr_type, address, satoshis, lock_script, timestamp) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    insertSQL = "INSERT INTO p2pk_outputs(output_id, tx_id, output_index, spended, relation_addr, addr_type, address, satoshis, lock_script, timestamp) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, output_data_list)
 
     # 创建索引
+    save_to_mysql(["CREATE INDEX `idx_tx_id` ON `p2pk_outputs` (`tx_id`)"])
     save_to_mysql(["CREATE INDEX `idx_relation_addr` ON `p2pk_outputs` (`relation_addr`)"])
 
     print('load output data finished')
@@ -271,7 +295,7 @@ def address_to_mysql(addr_map):
 
     addr_data_list = []
     for addr, addr_info in addr_map.items():
-        addr_data_list.append((addr_info['addr_id'], addr, addr_info['satoshis'], addr_info['tx_count'], addr_info['first_time'], addr_info['last_time']))
+        addr_data_list.append((addr_info['addr_id'], addr, addr_info['satoshis'], addr_info['tx_count'], addr_info['utxo_cnt'], addr_info['spend_cnt'], addr_info['first_time'], addr_info['last_time']))
 
     sql = ["""
         DROP TABLE IF EXISTS `p2pk_address`
@@ -282,22 +306,24 @@ def address_to_mysql(addr_map):
             `address` varchar(256) NOT NULL,
             `satoshis` bigint(11) NOT NULL,
             `tx_count` int(11) NOT NULL,
+            `utxo_count` int(11) NOT NULL,
+            `spend_count` int(11) NOT NULL,
             `first_time` int(11) NOT NULL,
             `last_time` int(11) NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
         """
     ]
 
-    insertSQL = "INSERT INTO p2pk_address(addr_id, address, satoshis, tx_count, first_time, last_time) VALUES(%s, %s, %s, %s, %s, %s)"
+    insertSQL = "INSERT INTO p2pk_address(addr_id, address, satoshis, tx_count, utxo_count, spend_count, first_time, last_time) VALUES(%s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, addr_data_list)
 
     print('load address data finished')
 
 
 if __name__ == '__main__':
-    block_to_mysql()
-    transaction_to_mysql()
-    input_to_mysql()
+    # block_to_mysql()
+    # transaction_to_mysql()
+    # input_to_mysql()
     output_to_mysql()
 
 
