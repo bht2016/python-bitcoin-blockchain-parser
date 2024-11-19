@@ -52,9 +52,9 @@ Block_fields = ['block_id', 'block_hash', 'version', 'timestamp', 'datetime', 'n
 def block_data(block_id, block):
     return [block_id, block.hash, block.header.version, block.header.timestamp, block.header.datetime, block.header.nonce, block.header.difficulty, block.header.merkle_root, block.n_transactions]
 
-Transaction_fields = ['trans_id', 'block_id', 'tx_hash', 'version', 'locktime', 'is_segwit', 'is_coinbase', 'intput_cnt', 'ouput_cnt', 'total_satoshis']
-def tx_data(trans_id, block_id, tx, total_satoshis):
-    return [trans_id, block_id, tx.hash, tx.version, tx.locktime, tx.is_coinbase(), tx.is_segwit, tx.n_inputs, tx.n_outputs, total_satoshis]
+Transaction_fields = ['trans_id', 'block_id', 'tx_hash', 'version', 'trans_time', 'locktime', 'is_segwit', 'is_coinbase', 'intput_cnt', 'ouput_cnt', 'total_satoshis']
+def tx_data(trans_id, block_id, block, tx, total_satoshis):
+    return [trans_id, block_id, tx.hash, tx.version, block.header.timestamp, tx.locktime, tx.is_coinbase(), tx.is_segwit, tx.n_inputs, tx.n_outputs, total_satoshis]
 
 
 Input_fields = ['input_id', 'trans_id', 'output_id', 'transaction_hash', 'transaction_index', 'unlock_script', 'witness']
@@ -146,7 +146,7 @@ if __name__ == '__main__':
                     if output.is_pubkey():
                         save_tx = True
                         index_set = utxo.get(tx.txid, {})
-                        index_set[i] = (output_id, extract_addr(output.addresses))
+                        index_set[i] = (output_id, extract_addr(output.addresses), output.value)
                         utxo[tx.txid] = index_set
 
                     output_id += 1
@@ -154,7 +154,7 @@ if __name__ == '__main__':
                 if save_tx:
                     save_block = True
                     # (trans_id, block_id, tx, total_satoshis)
-                    tx_list.append(tx_data(trans_id, block_id, tx, total_satoshis))
+                    tx_list.append(tx_data(trans_id, block_id, block, tx, total_satoshis))
                     for item in inputs_tmp_list:
                         input_list.append(item)
                     for item in output_tmp_list:

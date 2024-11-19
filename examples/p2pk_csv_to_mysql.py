@@ -109,14 +109,15 @@ def transaction_to_mysql():
         block_id = int(row[1])
         tx_hash = row[2]
         version = int(row[3])
-        locktime = int(row[4])
-        is_segwit = 1 if row[5] == 'True' else 0
-        is_coinbase = 1 if row[6] == 'True' else 0
-        input_cnt = int(row[7])
-        ouput_cnt = int(row[8])
-        total_satoshis = int(row[9])
+        tx_time = int(row[4])
+        locktime = int(row[5])
+        is_segwit = 1 if row[6] == 'True' else 0
+        is_coinbase = 1 if row[7] == 'True' else 0
+        input_cnt = int(row[8])
+        ouput_cnt = int(row[9])
+        total_satoshis = int(row[10])
 
-        tx_data_list.append((tx_id, block_id, tx_hash, version, locktime, is_segwit, is_coinbase, input_cnt, ouput_cnt, total_satoshis))
+        tx_data_list.append((tx_id, block_id, tx_hash, version, tx_time, locktime, is_segwit, is_coinbase, input_cnt, ouput_cnt, total_satoshis))
 
 
     sql = ["""
@@ -128,9 +129,10 @@ def transaction_to_mysql():
             `block_id` int(11) NOT NULL,
             `tx_hash` varchar(126) NOT NULL,
             `version` int(11) NOT NULL,
+            `timestamp` int(11) NOT NULL,
             `locktime` int(11) NOT NULL,
-            `is_segwit` bit(1) NOT NULL,
-            `is_coinbase` bit(1) NOT NULL,
+            `is_segwit` TINYINT(1) NOT NULL,
+            `is_coinbase` TINYINT(1) NOT NULL,
             `input_cnt` int(5)NOT NULL,
             `ouput_cnt` int(5)NOT NULL,
             `total_satoshis` bigint(5) NOT NULL
@@ -138,7 +140,7 @@ def transaction_to_mysql():
         """
     ]
 
-    insertSQL = "INSERT INTO p2pk_transactions(tx_id, block_id, tx_hash, version, locktime, is_segwit, is_coinbase, input_cnt, ouput_cnt, total_satoshis) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    insertSQL = "INSERT INTO p2pk_transactions(tx_id, block_id, tx_hash, version, timestamp, locktime, is_segwit, is_coinbase, input_cnt, ouput_cnt, total_satoshis) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, tx_data_list)
 
     # 创建索引
@@ -266,7 +268,7 @@ def output_to_mysql():
             `output_id` int(11) NOT NULL PRIMARY KEY,
             `tx_id` int(11) NOT NULL,
             `output_index` int(11) NOT NULL,
-            `spended` bit(1) NOT NULL,
+            `spended` TINYINT(1) NOT NULL,
             `relation_addr` int(11) NOT NULL,
             `addr_type` varchar(32) NOT NULL,
             `address` varchar(256) NOT NULL,
