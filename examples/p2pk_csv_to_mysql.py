@@ -24,7 +24,7 @@ def read_csv(file_path):
 
 def save_to_mysql(preSQLs, insertSQL=None, data_list=None):
     try:
-        conn = pymysql.connect(host='10.10.12.3', port=3306, user='root', password='123456', db='p2pk', charset="utf8")
+        conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='123456', db='p2pk', charset="utf8")
 
         with conn.cursor() as cursor:
             for sql in preSQLs:
@@ -163,8 +163,9 @@ def input_to_mysql():
         output_id = int(row[2])
         tx_hash = row[3]
         tx_index = int(row[4])
-        unlock_script = row[5]
-        witness = row[6]
+        value = int(row[5])
+        unlock_script = row[6]
+        witness = row[7]
 
         coinbase = False
         if row[3] == '0000000000000000000000000000000000000000000000000000000000000000':
@@ -174,7 +175,7 @@ def input_to_mysql():
         if tx_index >= 0xFFFFFFFF:
             tx_index = -1
 
-        input_data_list.append((input_id, tx_id, coinbase, output_id, tx_hash, tx_index, unlock_script, witness))
+        input_data_list.append((input_id, tx_id, coinbase, output_id, tx_hash, tx_index, value, unlock_script, witness))
 
     sql = ["""
         DROP TABLE IF EXISTS `p2pk_inputs`
@@ -187,13 +188,14 @@ def input_to_mysql():
             `output_id` int(11) NOT NULL,
             `transaction_hash` varchar(128) NOT NULL,
             `transaction_index` int(11) NOT NULL,
+            `value` bigint(11) NOT NULL,
             `unlock_script` text NOT NULL,
             `witness` varchar(1024) NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
         """
     ]
 
-    insertSQL = "INSERT INTO p2pk_inputs(input_id, tx_id, coinbase, output_id, transaction_hash, transaction_index, unlock_script, witness) VALUES(%s, %s, %s, %s, %s, %s, %s, %s)"
+    insertSQL = "INSERT INTO p2pk_inputs(input_id, tx_id, coinbase, output_id, transaction_hash, transaction_index, value, unlock_script, witness) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, input_data_list)
 
     # 创建索引
@@ -211,7 +213,7 @@ def output_to_mysql():
     addr_id = 0
     utxo = load_utxo('data/p2pk_utxos.csv')
     for txid, output in utxo.items():
-        for index, (output_id, addr) in output.items():
+        for index, (output_id, addr, _) in output.items():
             addr_info = addr_map.get(addr, {})
             addr_info['addr_id'] = addr_id
             addr_id += 1
@@ -325,8 +327,8 @@ def address_to_mysql(addr_map):
 if __name__ == '__main__':
     # block_to_mysql()
     # transaction_to_mysql()
-    # input_to_mysql()
-    output_to_mysql()
+    input_to_mysql()
+    # output_to_mysql()
 
 
 

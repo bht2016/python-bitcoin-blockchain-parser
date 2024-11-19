@@ -3,6 +3,7 @@ import json
 import os
 import re
 from collections import namedtuple
+from utxo import *
 
 from blockchain_parser.address import Address
 from blockchain_parser.block import Block
@@ -57,9 +58,9 @@ def tx_data(trans_id, block_id, block, tx, total_satoshis):
     return [trans_id, block_id, tx.hash, tx.version, block.header.timestamp, tx.locktime, tx.is_coinbase(), tx.is_segwit, tx.n_inputs, tx.n_outputs, total_satoshis]
 
 
-Input_fields = ['input_id', 'trans_id', 'output_id', 'transaction_hash', 'transaction_index', 'unlock_script', 'witness']
-def input_data(input_id, trans_id, output_id, input):
-    return [input_id, trans_id, output_id, input.transaction_hash, input.transaction_index, input.script, input.witnesses]
+Input_fields = ['input_id', 'trans_id', 'output_id', 'transaction_hash', 'transaction_index', 'value', 'unlock_script', 'witness']
+def input_data(input_id, trans_id, output_id, value, input):
+    return [input_id, trans_id, output_id, input.transaction_hash, input.transaction_index, value, input.script, input.witnesses]
 
 Output_fields = ['output_id', 'trans_id', 'output_index', 'addr_type', 'addresses', 'satoshis', 'lock_script', "timestamp"]
 def output_data(output_id, trans_id, output_index, block, output):
@@ -85,7 +86,7 @@ def extract_addr(address):
 
 if __name__ == '__main__':
 
-    blocks_dir = '/home/boht/work/tmp/blocks'
+    blocks_dir = '/home/boht/work/pyproj/python-bitcoin-blockchain-parser/block'
 
     blocks_file = 'data/p2pk_blocks.csv'
     txs_file = 'data/p2pk_txs.csv'
@@ -94,6 +95,8 @@ if __name__ == '__main__':
     utxos_file = 'data/p2pk_utxos.csv'
 
     checkpoint_file = 'data/checkpoint.txt'
+
+    open_db('data/utxo.db')
 
     utxo = load_utxo(utxos_file)
 
@@ -133,7 +136,9 @@ if __name__ == '__main__':
                             del utxo[input.transaction_hash]
 
                     # (trans_id, output_id, input)
-                    inputs_tmp_list.append(input_data(input_id, trans_id, oid, input))
+                    input_value, _ = get_ustxo(input.transaction_hash, input.transaction_index)
+                    inputs_tmp_list.append(input_data(input_id, trans_id, oid, input_value, input))
+                    delete_utxo(input.transaction_hash, input.transaction_index)
                     input_id += 1
 
                 total_satoshis = 0
@@ -142,6 +147,8 @@ if __name__ == '__main__':
                     # (output_id, trans_id, output_index, block, output):
                     output_tmp_list.append(output_data(output_id, trans_id, i, block, output))
                     total_satoshis += output.value
+
+                    put_utxo(tx.txid, i, output.value)
 
                     if output.is_pubkey():
                         save_tx = True
