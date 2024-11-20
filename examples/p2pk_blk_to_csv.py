@@ -49,18 +49,18 @@ def load_checkpoint(file_path):
     return 0, 0, 0, 0, 0
 
 
-Block_fields = ['block_id', 'block_hash', 'version', 'timestamp', 'datetime', 'nonce', 'difficulty', 'merkle_root', 'trans_cnt']
-def block_data(block_id, block):
-    return [block_id, block.hash, block.header.version, block.header.timestamp, block.header.datetime, block.header.nonce, block.header.difficulty, block.header.merkle_root, block.n_transactions]
+Block_fields = ['block_id', 'block_hash', 'version', 'timestamp', 'datetime', 'nonce', 'difficulty', 'merkle_root', 'trans_cnt', 'include_cnt']
+def block_data(block_id, block, include_cnt):
+    return [block_id, block.hash, block.header.version, block.header.timestamp, block.header.datetime, block.header.nonce, block.header.difficulty, block.header.merkle_root, block.n_transactions, include_cnt]
 
 Transaction_fields = ['trans_id', 'block_id', 'tx_hash', 'version', 'trans_time', 'locktime', 'is_segwit', 'is_coinbase', 'intput_cnt', 'ouput_cnt', 'total_satoshis']
 def tx_data(trans_id, block_id, block, tx, total_satoshis):
     return [trans_id, block_id, tx.hash, tx.version, block.header.timestamp, tx.locktime, tx.is_coinbase(), tx.is_segwit, tx.n_inputs, tx.n_outputs, total_satoshis]
 
 
-Input_fields = ['input_id', 'trans_id', 'output_id', 'transaction_hash', 'transaction_index', 'value', 'unlock_script', 'witness']
-def input_data(input_id, trans_id, output_id, value, input):
-    return [input_id, trans_id, output_id, input.transaction_hash, input.transaction_index, value, input.script, input.witnesses]
+Input_fields = ['input_id', 'trans_id', 'output_id', 'transaction_hash', 'transaction_index', 'coinbase', 'value', 'unlock_script', 'witness']
+def input_data(input_id, trans_id, output_id, coinbase, value, input):
+    return [input_id, trans_id, output_id, input.transaction_hash, input.transaction_index, coinbase, value, input.script, input.witnesses]
 
 Output_fields = ['output_id', 'trans_id', 'output_index', 'addr_type', 'addresses', 'satoshis', 'lock_script', "timestamp"]
 def output_data(output_id, trans_id, output_index, block, output):
@@ -86,7 +86,7 @@ def extract_addr(address):
 
 if __name__ == '__main__':
 
-    blocks_dir = '/home/boht/work/pyproj/python-bitcoin-blockchain-parser/block'
+    blocks_dir = '/home/boht/work/tmp/blocks'
 
     blocks_file = 'data/p2pk_blocks.csv'
     txs_file = 'data/p2pk_txs.csv'
@@ -122,25 +122,37 @@ if __name__ == '__main__':
             block = Block(raw_block, block_id, blockfile)
 
             save_block = False
+            include_cnt = 0
             for tx in block.transactions:
+
+                # ============================= 处理 input =================================
                 inputs_tmp_list = []
                 save_tx = False
                 for i, input in enumerate(tx.inputs):
 
+                    input_value = 0
+                    coinbase = False
                     oid = -1
-                    if input.transaction_hash in utxo and input.transaction_index in utxo[input.transaction_hash]:
-                        save_tx = True
-                        oid = utxo[input.transaction_hash][input.transaction_index][0]
-                        del utxo[input.transaction_hash][input.transaction_index]
-                        if len(utxo[input.transaction_hash]) == 0:
-                            del utxo[input.transaction_hash]
+                    if input.transaction_hash == '0000000000000000000000000000000000000000000000000000000000000000':
+                        # coinbase
+                        coinbase = True
+                        input_value = int(50 * 100000000 / (2 ** (block_id // 210000)))
+                    else:
+                        # 常规输入
+                        if input.transaction_hash in utxo and input.transaction_index in utxo[input.transaction_hash]:
+                            save_tx = True
+                            oid = utxo[input.transaction_hash][input.transaction_index][0]
+                            del utxo[input.transaction_hash][input.transaction_index]
+                            if len(utxo[input.transaction_hash]) == 0:
+                                del utxo[input.transaction_hash]
 
-                    # (trans_id, output_id, input)
-                    input_value, _ = get_ustxo(input.transaction_hash, input.transaction_index)
-                    inputs_tmp_list.append(input_data(input_id, trans_id, oid, input_value, input))
-                    delete_utxo(input.transaction_hash, input.transaction_index)
+                        input_value, exists = get_utxo(input.transaction_hash, input.transaction_index)
+                        delete_utxo(input.transaction_hash, input.transaction_index)
+
+                    inputs_tmp_list.append(input_data(input_id, trans_id, oid, coinbase, input_value, input))
                     input_id += 1
 
+                # ============================= 处理 output =================================
                 total_satoshis = 0
                 output_tmp_list = []
                 for i, output in enumerate(tx.outputs):
@@ -158,8 +170,10 @@ if __name__ == '__main__':
 
                     output_id += 1
 
+                # ============================= 处理 transaction =================================
                 if save_tx:
                     save_block = True
+                    include_cnt += 1
                     # (trans_id, block_id, tx, total_satoshis)
                     tx_list.append(tx_data(trans_id, block_id, block, tx, total_satoshis))
                     for item in inputs_tmp_list:
@@ -169,12 +183,14 @@ if __name__ == '__main__':
 
                 trans_id += 1
 
+            # ============================= 处理 block =================================
             if save_block:
                 # (block_id, block)
-                block_list.append(block_data(block_id, block))
+                block_list.append(block_data(block_id, block, include_cnt))
 
             block_id += 1
 
+        # ============================= 保存 数据和进度 =================================
         # Save to CSV
         save_to_csv(blocks_file, block_list, Block_fields, overwrite)
         save_to_csv(txs_file, tx_list, Transaction_fields, overwrite)

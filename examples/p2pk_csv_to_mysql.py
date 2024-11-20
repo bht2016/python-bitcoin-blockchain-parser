@@ -24,7 +24,7 @@ def read_csv(file_path):
 
 def save_to_mysql(preSQLs, insertSQL=None, data_list=None):
     try:
-        conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='123456', db='p2pk', charset="utf8")
+        conn = pymysql.connect(host='10.10.12.3', port=3306, user='root', password='123456', db='p2pk', charset="utf8")
 
         with conn.cursor() as cursor:
             for sql in preSQLs:
@@ -69,7 +69,8 @@ def block_to_mysql():
         difficulty = float(row[6])
         merkle_root = row[7]
         trans_cnt = int(row[8])
-        block_data_list.append((block_id, block_hash, version, timestamp, nonce, difficulty, merkle_root, trans_cnt))
+        include_cnt = int(row[9])
+        block_data_list.append((block_id, block_hash, version, timestamp, nonce, difficulty, merkle_root, trans_cnt, include_cnt))
 
     sql = ["""
         DROP TABLE IF EXISTS `p2pk_blocks`
@@ -83,11 +84,12 @@ def block_to_mysql():
             `nonce` bigint(11) NOT NULL,
             `difficulty` double NOT NULL,
             `merkle_root` varchar(128) NOT NULL,
-            `trans_cnt` int(11) NOT NULL
+            `trans_cnt` int(11) NOT NULL,
+            `include_cnt` int(11) NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
         """]
 
-    insertSQL = "INSERT INTO p2pk_blocks(block_id, block_hash, version, timestamp, nonce, difficulty, merkle_root, trans_cnt) VALUES(%s, %s, %s, %s, %s, %s, %s, %s)"
+    insertSQL = "INSERT INTO p2pk_blocks(block_id, block_hash, version, timestamp, nonce, difficulty, merkle_root, trans_cnt, include_cnt) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, block_data_list)
 
     # 创建索引
@@ -156,21 +158,17 @@ def input_to_mysql():
 
     input_data_list = []
     for row in read_csv('data/p2pk_inputs.csv'):
-        # trans_id,output_id,transaction_hash,transaction_index,unlock_script,witness
+        # ['input_id', 'trans_id', 'output_id', 'transaction_hash', 'transaction_index', 'coinbase', 'value', 'unlock_script', 'witness']
 
         input_id = int(row[0])
         tx_id = int(row[1])
         output_id = int(row[2])
         tx_hash = row[3]
         tx_index = int(row[4])
-        value = int(row[5])
-        unlock_script = row[6]
-        witness = row[7]
-
-        coinbase = False
-        if row[3] == '0000000000000000000000000000000000000000000000000000000000000000':
-            coinbase = True
-
+        coinbase = 1 if row[5] == 'True' else 0
+        value = int(row[6])
+        unlock_script = row[7]
+        witness = row[8]
 
         if tx_index >= 0xFFFFFFFF:
             tx_index = -1
@@ -274,14 +272,14 @@ def output_to_mysql():
             `relation_addr` int(11) NOT NULL,
             `addr_type` varchar(32) NOT NULL,
             `address` varchar(256) NOT NULL,
-            `satoshis` bigint(11) NOT NULL,
+            `value` bigint(11) NOT NULL,
             `lock_script` text NOT NULL,
             `timestamp` int(11) NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
         """
     ]
 
-    insertSQL = "INSERT INTO p2pk_outputs(output_id, tx_id, output_index, spended, relation_addr, addr_type, address, satoshis, lock_script, timestamp) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+    insertSQL = "INSERT INTO p2pk_outputs(output_id, tx_id, output_index, spended, relation_addr, addr_type, address, value, lock_script, timestamp) VALUES(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     save_to_mysql(sql, insertSQL, output_data_list)
 
     # 创建索引
@@ -327,8 +325,8 @@ def address_to_mysql(addr_map):
 if __name__ == '__main__':
     # block_to_mysql()
     # transaction_to_mysql()
-    input_to_mysql()
-    # output_to_mysql()
+    # input_to_mysql()
+    output_to_mysql()
 
 
 
